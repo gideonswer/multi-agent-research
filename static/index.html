@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Multi-Agent Research Assistant</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #262b36; --text: #e6e8ee; --muted: #8b93a7;
+    --planner: #7c9cff; --researcher: #3fc59b; --writer: #f0a35e; --error: #ef6b6b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { padding: 28px 32px 8px; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: -.01em; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  form { display: flex; gap: 10px; padding: 16px 32px; }
+  input { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+          background: var(--panel); color: var(--text); font-size: 15px; }
+  input:focus { outline: 2px solid var(--planner); border-color: transparent; }
+  button { padding: 0 20px; border: 0; border-radius: 10px; background: var(--planner);
+           color: #0b0d12; font-weight: 600; font-size: 15px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  main { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; gap: 20px; padding: 8px 32px 40px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .col-title { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+               margin: 0 0 10px; }
+  .agent { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--c);
+           border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; animation: in .25s ease; }
+  @keyframes in { from { opacity: 0; transform: translateY(4px); } }
+  .agent-head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .agent.running .dot { animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .status { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .log { margin: 6px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+  .log li { margin-top: 3px; }
+  .log a { color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); }
+  #report { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+            padding: 8px 28px 20px; min-height: 240px; }
+  #report.empty { display: grid; place-items: center; color: var(--muted); }
+  #report h1 { font-size: 24px; } #report h2 { font-size: 18px; margin-top: 26px; }
+  #report a { color: var(--planner); }
+  .error { color: var(--error); }
+  .examples { padding: 0 32px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .examples button { background: transparent; border: 1px solid var(--line); color: var(--muted);
+                     font-weight: 400; font-size: 13px; padding: 6px 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Multi-Agent Research Assistant</h1>
+  <p>A planner splits your question, researchers search the web in parallel, and a writer builds a cited report.</p>
+</header>
+
+<form id="form">
+  <input id="q" placeholder="Ask a research question…" autocomplete="off" required minlength="3" />
+  <button id="go" type="submit">Research</button>
+</form>
+<div class="examples" id="examples"></div>
+
+<main>
+  <section>
+    <p class="col-title">Agent activity</p>
+    <div id="agents"></div>
+  </section>
+  <section>
+    <p class="col-title">Report</p>
+    <article id="report" class="empty">Your cited report will appear here.</article>
+  </section>
+</main>
+
+<script>
+const EXAMPLES = [
+  "How are AI agents being used in software engineering in 2026?",
+  "What are the pros and cons of solid-state batteries for EVs?",
+  "How is India's UPI system expanding internationally?",
+];
+const COLORS = { planner: "var(--planner)", writer: "var(--writer)" };
+const $ = (id) => document.getElementById(id);
+const cards = {};
+let source = null;
+
+EXAMPLES.forEach((text) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = text;
+  b.onclick = () => { $("q").value = text; $("form").requestSubmit(); };
+  $("examples").appendChild(b);
+});
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function card(agent) {
+  if (cards[agent]) return cards[agent];
+  const el = document.createElement("div");
+  el.className = "agent running";
+  el.style.setProperty("--c", COLORS[agent] || "var(--researcher)");
+  const label = agent.replace(/^(\w)/, (c) => c.toUpperCase()).replace("-", " ");
+  el.innerHTML = `<div class="agent-head"><span class="dot"></span>${label}<span class="status">working</span></div><ul class="log"></ul>`;
+  $("agents").appendChild(el);
+  return (cards[agent] = el);
+}
+
+function onStep(e) {
+  const el = card(e.agent);
+  const log = el.querySelector(".log");
+  const li = document.createElement("li");
+  li.innerHTML = esc(e.message);
+  if (e.status === "error") li.className = "error";
+  log.appendChild(li);
+
+  if (e.sub_questions) {
+    const chips = document.createElement("div"); chips.className = "chips";
+    e.sub_questions.forEach((s) => { const c = document.createElement("span"); c.className = "chip"; c.textContent = s; chips.appendChild(c); });
+    li.appendChild(chips);
+  }
+  if (e.sources) {
+    const ul = document.createElement("ul"); ul.className = "log";
+    e.sources.slice(0, 5).forEach((s) => {
+      const item = document.createElement("li");
+      item.innerHTML = `↳ <a href="${encodeURI(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a>`;
+      ul.appendChild(item);
+    });
+    li.appendChild(ul);
+  }
+  if (e.status === "done" || e.status === "error") {
+    el.classList.remove("running");
+    el.querySelector(".status").textContent = e.status === "done" ? "done ✓" : "error";
+  }
+}
+
+function finish() { if (source) source.close(); source = null; $("go").disabled = false; $("go").textContent = "Research"; }
+
+$("form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const q = $("q").value.trim();
+  if (!q || source) return;
+  $("agents").innerHTML = ""; Object.keys(cards).forEach((k) => delete cards[k]);
+  $("report").className = "empty"; $("report").textContent = "Agents are working…";
+  $("go").disabled = true; $("go").textContent = "Researching…";
+
+  source = new EventSource(`/api/research?q=${encodeURIComponent(q)}`);
+  source.onmessage = (msg) => {
+    const e = JSON.parse(msg.data);
+    if (e.type === "step") onStep(e);
+    else if (e.type === "report") {
+      $("report").className = "";
+      $("report").innerHTML = window.marked && window.DOMPurify
+        ? DOMPurify.sanitize(marked.parse(e.report))
+        : `<pre style="white-space:pre-wrap">${esc(e.report)}</pre>`;
+      $("report").querySelectorAll("a").forEach((a) => { a.target = "_blank"; a.rel = "noopener"; });
+    } else if (e.type === "error") {
+      $("report").className = "";
+      $("report").innerHTML = `<p class="error">Error: ${esc(e.message)}</p>`;
+    } else if (e.type === "end") finish();
+  };
+  source.onerror = () => { if (source) { $("report").innerHTML = '<p class="error">Connection lost.</p>'; finish(); } };
+});
+</script>
+</body>
+</html>
