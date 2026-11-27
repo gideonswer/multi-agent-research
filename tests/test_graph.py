@@ -53,3 +53,13 @@ def test_api_streams_steps_and_report():
 def test_clean_citations_handles_gpt_oss_style():
     text = "fact 【1†L1-L4】 more 【12】 and [3†src] ok [4]"
     assert clean_citations(text) == "fact [1] more [12] and [3] ok [4]"
+
+
+def test_rate_limit_blocks_after_limit(monkeypatch):
+    from app import config, main
+
+    monkeypatch.setattr(config, "RATE_LIMIT_PER_HOUR", 1)
+    main._runs.clear()
+    assert main.allowed("1.2.3.4") is True
+    assert main.allowed("1.2.3.4") is False
+    assert main.allowed("5.6.7.8") is True

@@ -26,3 +26,6 @@ MAX_SUB_QUESTIONS = int(os.getenv("MAX_SUB_QUESTIONS", "4"))
 
 # Mock mode: fake LLM + fake search. Lets you run the demo/tests with no keys.
 MOCK_MODE = _bool("MOCK_MODE", False)
+
+# Public-demo protection: max research runs per visitor IP per hour (0 = no limit)
+RATE_LIMIT_PER_HOUR = int(os.getenv("RATE_LIMIT_PER_HOUR", "0"))

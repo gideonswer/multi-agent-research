@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: multi-agent-research
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: LLM_PROVIDER
+        value: groq
+      - key: LLM_MODEL
+        value: openai/gpt-oss-120b
+      - key: FALLBACK_PROVIDER
+        value: gemini
+      - key: FALLBACK_MODEL
+        value: gemini-3.8-flash
+      # DuckDuckGo blocks most cloud servers, so the hosted demo searches with Tavily
+      - key: SEARCH_PROVIDER
+        value: tavily
+      - key: RATE_LIMIT_PER_HOUR
+        value: "3"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
