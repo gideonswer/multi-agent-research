@@ -1,5 +1,6 @@
 # Multi-Agent Research Assistant
-
+**🔗 Live demo:** https://multi-agent-research-pd9c.onrender.com
+*(Free hosting: the first load after a quiet period can take ~1 minute. Limited to 3 questions per hour per visitor.)*
 Ask a question and a small team of AI agents researches it for you:
 
 1. **Planner agent** splits the question into focused sub-questions.
